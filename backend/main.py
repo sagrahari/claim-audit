@@ -6,6 +6,14 @@ import shutil
 
 from . import models, schemas, database, ingest
 import os
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 root_path = os.getenv("ROOT_PATH") or ("/api" if os.getenv("VERCEL") else "")
 app = FastAPI(title="NHIS Fraud Auditor Dashboard", root_path=root_path)
@@ -29,6 +37,7 @@ def get_db():
 
 @app.post("/ingest")
 async def trigger_ingest(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+    logger.info(f"Received file upload: {file.filename}")
     # Save the uploaded file
     if os.getenv("VERCEL"):
         file_location = "/tmp/uploaded_claims.csv"
@@ -42,6 +51,7 @@ async def trigger_ingest(background_tasks: BackgroundTasks, file: UploadFile = F
 
     # Run ingestion in background to not block the UI
     background_tasks.add_task(ingest.ingest_data, file_location)
+    logger.info("Ingestion task added to background")
     return {"message": "File uploaded and ingestion started"}
 
 @app.get("/stats", response_model=schemas.Stats)

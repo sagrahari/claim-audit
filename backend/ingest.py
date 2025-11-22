@@ -3,6 +3,9 @@ from sqlalchemy.orm import Session
 from .database import SessionLocal, engine, Base
 from .models import Claim
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 def ingest_data(csv_path: str):
     """
@@ -14,12 +17,16 @@ def ingest_data(csv_path: str):
     2. Score = (Claim Amount / Average for Diagnosis) * 50.
     3. Cap score at 100.
     """
-    print(f"Loading data from {csv_path}...")
+    logger.info(f"Loading data from {csv_path}...")
     if not os.path.exists(csv_path):
-        print(f"File not found: {csv_path}")
+        logger.error(f"File not found: {csv_path}")
         return
 
-    df = pd.read_csv(csv_path)
+    try:
+        df = pd.read_csv(csv_path)
+    except Exception as e:
+        logger.error(f"Failed to read CSV: {e}")
+        return
     
     # Map CSV columns to model fields
     # CSV: Patient ID,AGE,GENDER,DATE OF ENCOUNTER,DATE OF DISCHARGE,DIAGNOSIS,Amount Billed
@@ -27,7 +34,7 @@ def ingest_data(csv_path: str):
     # Clean Amount Billed: remove non-numeric chars if any, handle empty strings
     df['Amount Billed'] = pd.to_numeric(df['Amount Billed'], errors='coerce').fillna(0)
     
-    print("Calculating fraud scores...")
+    logger.info("Calculating fraud scores...")
     # Heuristic: Group by DIAGNOSIS and calculate average Amount Billed
     avg_charges = df.groupby('DIAGNOSIS')['Amount Billed'].transform('mean')
     
@@ -37,7 +44,7 @@ def ingest_data(csv_path: str):
     scores = scores.clip(upper=100)
     df['fraud_score'] = scores.astype(int)
     
-    print("Initializing database...")
+    logger.info("Initializing database...")
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     
@@ -45,7 +52,7 @@ def ingest_data(csv_path: str):
     db.query(Claim).delete()
     db.commit()
     
-    print("Inserting data...")
+    logger.info(f"Inserting {len(df)} records...")
     for idx, row in df.iterrows():
         # Generate a dummy Claim ID since it's not in the CSV
         claim_id = f"CLM-{idx+1:04d}"
