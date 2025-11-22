@@ -7,7 +7,8 @@ import shutil
 from . import models, schemas, database, ingest
 import os
 
-app = FastAPI(title="NHIS Fraud Auditor Dashboard", root_path=os.getenv("ROOT_PATH", ""))
+root_path = os.getenv("ROOT_PATH") or ("/api" if os.getenv("VERCEL") else "")
+app = FastAPI(title="NHIS Fraud Auditor Dashboard", root_path=root_path)
 
 # CORS
 app.add_middleware(
@@ -29,10 +30,12 @@ def get_db():
 @app.post("/ingest")
 async def trigger_ingest(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
     # Save the uploaded file
-    file_location = "data/uploaded_claims.csv"
-    
-    # Ensure data directory exists
-    os.makedirs("data", exist_ok=True)
+    if os.getenv("VERCEL"):
+        file_location = "/tmp/uploaded_claims.csv"
+    else:
+        file_location = "data/uploaded_claims.csv"
+        # Ensure data directory exists
+        os.makedirs("data", exist_ok=True)
     
     with open(file_location, "wb+") as file_object:
         shutil.copyfileobj(file.file, file_object)
